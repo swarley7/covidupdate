@@ -1,6 +1,12 @@
 # covidupdate
 a slackbot that updates current covid-19 numbers
 
+Currently pulls data for Aus,NZ,US from three datasources (supposedly up-to-date sources):
+
+- AU: https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers
+- US: https://www.cdc.gov/coronavirus/2019-ncov/cases-updates/cases-in-us.html
+- NZ: https://www.health.govt.nz/our-work/diseases-and-conditions/covid-19-novel-coronavirus/covid-19-current-cases
+
 # Requires:
 - golang
 - a computer to run on
