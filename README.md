@@ -20,7 +20,7 @@ Currently pulls data for Aus,NZ,US from three datasources (supposedly up-to-date
 
 `go get -u`
 
-`GOOS=linux GOARCH=amd64 go build covid.go`
+`go build covid.go`
 
 `crontab -e # on the server you want it to run from`
 
