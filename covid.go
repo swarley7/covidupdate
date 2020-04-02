@@ -183,7 +183,7 @@ func tabularise(table [][]string) []slack.Block {
 }
 
 func main() {
-	apiKey := flag.String("key", "", "Supply the fucking bot key")
+	apiKey := flag.String("key", "", "Supply the bot key")
 	channelName := flag.String("channel", "devtrash", "channel to post to")
 	covidFile := flag.String("file", "covidtable.csv", "file to store data in")
 	// deltaFile := flag.String("dfile", "lastgenerated.txt", "file to store delta timestamp in")
