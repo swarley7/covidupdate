@@ -31,3 +31,6 @@ Add an entry to run every 10 mins:
 `*/10 * * * * /path/to/covid -key "xoxb-XXXXXX-XXXXXXXX-XXXXXXX" -channel covid-19 -file covidtable.csv`
 (hint: replace the channel and key with your own details. file is less important; that's where covid will store and check data from)
 
+# Screenshot of covideupdate doing its thang.
+
+![coviduptate](covidupdate.png)
