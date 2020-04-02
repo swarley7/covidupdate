@@ -16,6 +16,8 @@ Currently pulls data for Aus,NZ,US from three datasources (supposedly up-to-date
 
 # Usage:
 
+Add the bot to the slack and invite it to the target channel(s) (see https://api.slack.com/authentication/basics)
+
 `cd /path/to/covidupdate`
 
 `go get -u`
