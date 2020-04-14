@@ -23,6 +23,31 @@ func checkError(message string, err error) {
 	}
 }
 
+func Format(n int) string {
+	in := strconv.FormatInt(int64(n), 10)
+	numOfDigits := len(in)
+	if n < 0 {
+		numOfDigits-- // First character is the - sign (not a digit)
+	}
+	numOfCommas := (numOfDigits - 1) / 3
+
+	out := make([]byte, len(in)+numOfCommas)
+	if n < 0 {
+		in, out[0] = in[1:], '-'
+	}
+
+	for i, j, k := len(in)-1, len(out)-1, 0; ; i, j = i-1, j-1 {
+		out[j] = in[i]
+		if i == 0 {
+			return string(out)
+		}
+		if k++; k == 3 {
+			j, k = j-1, 0
+			out[j] = ','
+		}
+	}
+}
+
 func WriteCSVData(td [][]string, filename string) {
 	file, err := os.Create(filename)
 	checkError("Cannot create file", err)
@@ -157,12 +182,16 @@ func tabularise(table [][]string) []slack.Block {
 				log.Println(err)
 			}
 			deltaTime := row[len(row)-1]
-			count := row[2]
-			out = fmt.Sprintf("%v\n|%v|%v|", out, Pad(category, 20), Pad(count, 20))
+			count, err := strconv.Atoi(row[2])
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			out = fmt.Sprintf("%v\n|%v|%v|", out, Pad(category, 20), Pad(Format(count), 20))
 			if delta > 0 {
-				out = fmt.Sprintf("%v%v|", out, Pad(fmt.Sprintf("+%v in %v", delta, deltaTime), 20))
+				out = fmt.Sprintf("%v%v|", out, Pad(fmt.Sprintf("+%v in %v", Format(delta), deltaTime), 20))
 			} else if delta < 0 {
-				out = fmt.Sprintf("%v%v|", out, Pad(fmt.Sprintf("%v in %v", delta, deltaTime), 20))
+				out = fmt.Sprintf("%v%v|", out, Pad(fmt.Sprintf("%v in %v", Format(delta), deltaTime), 20))
 			} else if delta == 0 {
 				out = fmt.Sprintf("%v%v|", out, Pad(" ", 20))
 			}
