@@ -286,13 +286,15 @@ func main() {
 			}
 			s.Find("tr").Each(func(i int, s *goquery.Selection) {
 				res := []string{"sheep"}
-				if i < 1 {
-					return
-				}
+				s.Find("th").Each(func(i int, s *goquery.Selection) {
+
+					// This is now the header / title
+					res = append(res, Sanitise(s.Text()))
+				})
 				s.Find("td").Each(func(i int, s *goquery.Selection) {
 
-					// We can discard this column too - it's the 'last 24 hours thing'
-					if (i+1)%3 == 0 {
+					// We can discard the second column too - it's the 'last 24 hours thing'
+					if (i+1)%2 == 0 {
 						return
 					}
 					res = append(res, Sanitise(s.Text()))
@@ -303,13 +305,14 @@ func main() {
 		})
 	}
 	log.Println(err)
+	exit := true
 
 	oldData, err := GetCSVData(*covidFile)
 	if err != nil || len(oldData) == 0 {
+		exit = false
 		oldData = tableData
 	}
 	modified, deltas := compareDataSets(oldData, tableData)
-	exit := true
 	for _, i := range deltas {
 		if i[len(i)-2] != "0" {
 			exit = false
