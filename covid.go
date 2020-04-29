@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -265,7 +264,7 @@ func main() {
 			lastUpdated = fmt.Sprintf("%v%v", lastUpdated, strings.TrimSpace(s.Text()))
 		})
 	}
-	log.Println(err)
+	// log.Println(err)
 
 	//Murica data
 	response, err = http.Get("https://www.cdc.gov/coronavirus/2019-ncov/cases-updates/cases-in-us.html")
@@ -279,19 +278,17 @@ func main() {
 		}
 
 		// tableData = append(tableData, []string{"~Murica", "~Dataz", "~Delta (TBD)"})
-		re := regexp.MustCompile(`\d+,?\d+`)
-		document.Find("div.card-body.bg-white ul").Each(func(i int, s *goquery.Selection) {
-			res := []string{}
-			s.Find("li").Each(func(i int, s *goquery.Selection) {
-				row := strings.Split(s.Text(), ":")
-				num := re.FindString(row[1])
-				num = strings.Replace(num, ",", "", -1)
-				res = []string{"murica", Sanitise(row[0]), Sanitise(num), currTime}
-				tableData = append(tableData, res)
-			})
+		labels := []string{"total_cases", "total_deaths"}
+
+		document.Find("div.callouts-container div.callout span.count").Each(func(i int, s *goquery.Selection) {
+			num := s.Text()
+			num = strings.Replace(num, ",", "", -1)
+			num = strings.Replace(num, "\ufeff", "", -1)
+			res := []string{"murica", Sanitise(labels[i]), Sanitise(num), currTime}
+			tableData = append(tableData, res)
 		})
 	}
-	log.Println(err)
+	// log.Println(err)
 
 	//NZ data
 	response, err = http.Get("https://www.health.govt.nz/our-work/diseases-and-conditions/covid-19-novel-coronavirus/covid-19-current-cases")
@@ -333,7 +330,7 @@ func main() {
 			})
 		})
 	}
-	log.Println(err)
+	// log.Println(err)
 	exit := true
 
 	oldData, err := GetCSVData(*covidFile)
