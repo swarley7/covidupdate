@@ -34,3 +34,6 @@ Add an entry to run every 10 mins:
 # Screenshot of covideupdate doing its thang.
 
 ![coviduptate](covidupdate.png)
+
+# Ack
+@c-sto / `github.com/c-sto` for helping fix the AU data source after they switched it to websockets (lol)

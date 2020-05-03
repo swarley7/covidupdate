@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -12,14 +14,195 @@ import (
 	"strings"
 	"time"
 
+	"net/url"
+
 	"github.com/PuerkitoBio/goquery"
+	"github.com/gorilla/websocket"
 	"github.com/slack-go/slack"
 )
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+type covidclient struct {
+	s     *websocket.Conn
+	DocID string
+}
+
+func GetData() (OutData, error) {
+	c := NewCovidClient()
+	defer c.s.Close()
+	c.SendString(fmt.Sprintf(`{"delta":true,"handle":-1,"method":"OpenDoc","params":["%s","","","",false],"id":1,"jsonrpc":"2.0"}`, c.DocID))
+	c.SendString(`{"delta":true,"method":"IsPersonalMode","handle":-1,"params":[],"id":2,"jsonrpc":"2.0"}`)
+	c.SendString(`{"delta":true,"handle":1,"method":"GetAppLayout","params":[],"id":3,"jsonrpc":"2.0"}`)
+	c.SendString(`{"delta":true,"handle":1,"method":"GetObject","params":["RHjRJ"],"id":4,"jsonrpc":"2.0"}`)
+	c.SendString(`{"delta":true,"handle":1,"method":"CreateSessionObject","params":[{"qInfo":{"qType":"SelectionObject","qId":"MURnmNgqd"},"qSelectionObjectDef":{}}],"id":5,"jsonrpc":"2.0"}`)
+	c.SendString(`{"delta":true,"handle":1,"method":"CreateSessionObject","params":[{"qInfo":{"qType":"BookmarkList","qId":"MUjSEzzm"},"qBookmarkListDef":{"qType":"bookmark","qData":{"title":"/qMetaDef/title","description":"/qMetaDef/description","sheetId":"/sheetId","selectionFields":"/selectionFields","creationDate":"/creationDate"}}}],"id":6,"jsonrpc":"2.0"}`)
+	for {
+		_, msg, _ := c.s.ReadMessage()
+		d := json.NewDecoder(bytes.NewReader(msg))
+		buh := GetDocListResp{}
+		d.Decode(&buh)
+		//fmt.Println(buh)
+		if buh.Error.Message != "" {
+			return OutData{}, fmt.Errorf("%d %s", buh.ID, buh.Error.Message)
+		}
+		if buh.ID == 6 {
+			break
+		}
+	}
+	c.SendString(`{"delta":true,"handle":2,"method":"GetLayout","params":[],"id":7,"jsonrpc":"2.0"}`)
+	c.SendString(`{"delta":true,"handle":2,"method":"GetHyperCubeData","params":["/qHyperCubeDef",[{"qTop":0,"qLeft":0,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":1,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":2,"qHeight":9,"qWidth":1}]],"id":14,"jsonrpc":"2.0"}`)
+	od := OutData{
+		Confirmed: make(map[string]int),
+		Dead:      make(map[string]int),
+	}
+	for {
+		_, msg, _ := c.s.ReadMessage()
+		d := json.NewDecoder(bytes.NewReader(msg))
+		buh := ActualData{}
+		d.Decode(&buh)
+		if buh.Error.Message != "" {
+			return OutData{}, fmt.Errorf("%d %s", buh.ID, buh.Error.Message)
+		}
+		if buh.ID == 14 {
+			for i, j := range buh.Result.QDataPages[0].Value[0].QMatrix {
+				confirm := buh.Result.QDataPages[0].Value[1].QMatrix[i][0].QNum
+				dead := buh.Result.QDataPages[0].Value[2].QMatrix[i][0].QNum
+				od.Confirmed[j[0].QText] = confirm
+				od.Dead[j[0].QText] = dead
+			}
+			break
+		}
+	}
+	return od, nil
+}
+func NewCovidClient() *covidclient {
+	u := url.URL{
+		Scheme: "wss",
+		Host:   "covid19-data.health.gov.au",
+		Path:   "/app/engineData",
+	}
+	docid := ""
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		panic(err)
+	}
+	c.WriteMessage(websocket.TextMessage, []byte(`{"delta":true,"method":"GetDocList","handle":-1,"params":[],"id":1,"jsonrpc":"2.0"}`))
+	for {
+		_, msg, _ := c.ReadMessage()
+		d := json.NewDecoder(bytes.NewReader(msg))
+		buh := GetDocListResp{}
+		d.Decode(&buh)
+		if buh.ID == 1 {
+			// fmt.Println(buh.Result.QDocList[0].Value[0].QDocID)
+			docid = buh.Result.QDocList[0].Value[0].QDocID
+			u.Path = "/app/" + docid
+			c.Close()
+			break
+		}
+	}
+	c, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+	return &covidclient{
+		s:     c,
+		DocID: docid,
+	}
+}
+func (cc *covidclient) SendString(s string) {
+	cc.s.WriteMessage(websocket.TextMessage, []byte(s))
+}
 
 func checkError(message string, err error) {
 	if err != nil {
 		log.Fatal(message, err)
 	}
+}
+
+type GetDocListResp struct {
+	Jsonrpc string `json:"jsonrpc"`
+	ID      int    `json:"id"`
+	Delta   bool   `json:"delta"`
+	Error   Error
+	Result  struct {
+		QDocList []struct {
+			Op    string `json:"op"`
+			Path  string `json:"path"`
+			Value []struct {
+				QDocName        string `json:"qDocName"`
+				QConnectedUsers int    `json:"qConnectedUsers"`
+				QFileTime       int    `json:"qFileTime"`
+				QFileSize       int    `json:"qFileSize"`
+				QDocID          string `json:"qDocId"`
+				QMeta           struct {
+					CreatedDate  time.Time   `json:"createdDate"`
+					ModifiedDate time.Time   `json:"modifiedDate"`
+					Published    bool        `json:"published"`
+					PublishTime  time.Time   `json:"publishTime"`
+					Privileges   []string    `json:"privileges"`
+					Description  string      `json:"description"`
+					DynamicColor string      `json:"dynamicColor"`
+					Create       interface{} `json:"create"`
+					Stream       struct {
+						ID   string `json:"id"`
+						Name string `json:"name"`
+					} `json:"stream"`
+					CanCreateDataConnections bool `json:"canCreateDataConnections"`
+				} `json:"qMeta"`
+				QLastReloadTime time.Time `json:"qLastReloadTime"`
+				QTitle          string    `json:"qTitle"`
+				QThumbnail      struct {
+					QURL string `json:"qUrl"`
+				} `json:"qThumbnail"`
+			} `json:"value"`
+		} `json:"qDocList"`
+	} `json:"result"`
+}
+type Error struct {
+	Code      int    `json:"code"`
+	Parameter string `json:"parameter"`
+	Message   string `json:"message"`
+}
+type ActualData struct {
+	Jsonrpc string `json:"jsonrpc"`
+	ID      int    `json:"id"`
+	Delta   bool   `json:"delta"`
+	Error   Error
+	Result  struct {
+		QDataPages []struct {
+			Op    string `json:"op"`
+			Path  string `json:"path"`
+			Value []struct {
+				QMatrix [][]struct {
+					QText       string `json:"qText"`
+					QNum        int    `json:"qNum"`
+					QElemNumber int    `json:"qElemNumber"`
+					QState      string `json:"qState"`
+					QAttrExps   struct {
+						QValues []struct {
+							QText string `json:"qText"`
+							QNum  string `json:"qNum"`
+						} `json:"qValues"`
+					} `json:"qAttrExps"`
+				} `json:"qMatrix"`
+				QTails []struct {
+					QUp   int `json:"qUp"`
+					QDown int `json:"qDown"`
+				} `json:"qTails"`
+				QArea struct {
+					QLeft   int `json:"qLeft"`
+					QTop    int `json:"qTop"`
+					QWidth  int `json:"qWidth"`
+					QHeight int `json:"qHeight"`
+				} `json:"qArea"`
+			} `json:"value"`
+		} `json:"qDataPages"`
+	} `json:"result"`
+}
+type OutData struct {
+	Confirmed map[string]int
+	Dead      map[string]int
 }
 
 func Format(n int) string {
@@ -101,11 +284,14 @@ func Equal(a, b []string) bool {
 func compareDataSets(old, new [][]string) ([][]string, [][]string) {
 	modified := [][]string{}
 	deltas := [][]string{}
-	for _, oldrow := range old {
-		for _, newrow := range new {
+	for _, newrow := range new {
+		// newboi := false
+		for _, oldrow := range old {
 			if oldrow[1] != newrow[1] {
+				// newboi = true
 				continue
 			}
+			// newboi = false
 			o, err := strconv.Atoi(oldrow[2])
 			if err != nil {
 				log.Fatal(err)
@@ -137,6 +323,11 @@ func compareDataSets(old, new [][]string) ([][]string, [][]string) {
 			deltas = append(deltas, d) // No change;
 			break
 		}
+		// if newboi {
+		// 	d := append(newrow, "", "")
+		// 	deltas = append(deltas, d)
+		// }
+
 	}
 	return modified, deltas
 }
@@ -211,6 +402,7 @@ func tabularise(table [][]string) []slack.Block {
 }
 
 func main() {
+
 	apiKey := flag.String("key", "", "Supply the bot key")
 	channelName := flag.String("channel", "devtrash", "channel to post to")
 	covidFile := flag.String("file", "covidtable.csv", "file to store data in")
@@ -231,43 +423,57 @@ func main() {
 	tableData := [][]string{}
 	lastUpdated := ""
 
-	//Australia data
-	response, err := http.Get("https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers")
-	if err == nil {
-		defer response.Body.Close()
+	// //Australia data
+	// response, err := http.Get("https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers")
+	// if err == nil {
+	// 	defer response.Body.Close()
 
-		// Create a goquery document from the HTTP response
-		document, err := goquery.NewDocumentFromReader(response.Body)
-		if err != nil {
-			log.Fatal("Error loading HTTP response body. ", err)
-		}
-
-		// tableData = append(tableData, []string{"~Straya", "~Dataz", "~Delta (TBD)"})
-
-		// Get the table data from the stupid fucking table - also fuck HTML
-		document.Find(".wrapper .health-table__responsive tr").Each(func(i int, s *goquery.Selection) {
-			res := []string{"straya"}
-			s.Find("td").Each(func(i int, s *goquery.Selection) {
-				d := strings.TrimSpace(s.Text())
-				if strings.HasPrefix(d, "*") {
-					return
-				}
-				res = append(res, Sanitise(d))
-			})
-			if len(res) < 3 {
-				return
-			}
-			res = append(res, currTime)
-			tableData = append(tableData, res)
-		})
-		document.Find(".au-body .main-content .au-callout, .au-body .main-content .field-name-field-link-external, .au-body .main-content .paragraphs-item-content-callout").Each(func(i int, s *goquery.Selection) {
-			lastUpdated = fmt.Sprintf("%v%v", lastUpdated, strings.TrimSpace(s.Text()))
-		})
+	/*------------------------------------------------------*/
+	// CSTO ADDITIONS
+	strayaData, err := GetData()
+	if err != nil {
+		log.Println(err)
 	}
+
+	// tableData = append(tableData, []string{"straya", "location", "cases", "deados"})
+	for k, v := range strayaData.Confirmed {
+		tableData = append(tableData, []string{"straya", Sanitise(k), fmt.Sprintf("%d", v), currTime})
+	}
+	// log.Println(tableData)
+	/*------------------------------------------------------*/
+	lastUpdated = fmt.Sprintf("As of %v there are {%d} confirmed cases across straya and {%d} deads.", currTime, strayaData.Confirmed["Australia"], strayaData.Dead["Australia"])
+	// Create a goquery document from the HTTP response
+	// 	document, err := goquery.NewDocumentFromReader(response.Body)
+	// 	if err != nil {
+	// 		log.Fatal("Error loading HTTP response body. ", err)
+	// 	}
+
+	// 	// tableData = append(tableData, []string{"~Straya", "~Dataz", "~Delta (TBD)"})
+
+	// 	// Get the table data from the stupid fucking table - also fuck HTML
+	// 	document.Find(".wrapper .health-table__responsive tr").Each(func(i int, s *goquery.Selection) {
+	// 		res := []string{"straya"}
+	// 		s.Find("td").Each(func(i int, s *goquery.Selection) {
+	// 			d := strings.TrimSpace(s.Text())
+	// 			if strings.HasPrefix(d, "*") {
+	// 				return
+	// 			}
+	// 			res = append(res, Sanitise(d))
+	// 		})
+	// 		if len(res) < 3 {
+	// 			return
+	// 		}
+	// 		res = append(res, currTime)
+	// 		tableData = append(tableData, res)
+	// 	})
+	// 	document.Find(".au-body .main-content .au-callout, .au-body .main-content .field-name-field-link-external, .au-body .main-content .paragraphs-item-content-callout").Each(func(i int, s *goquery.Selection) {
+	// 		lastUpdated = fmt.Sprintf("%v%v", lastUpdated, strings.TrimSpace(s.Text()))
+	// 	})
+	// }
 	// log.Println(err)
 
 	//Murica data
-	response, err = http.Get("https://www.cdc.gov/coronavirus/2019-ncov/cases-updates/cases-in-us.html")
+	response, err := http.Get("https://www.cdc.gov/coronavirus/2019-ncov/cases-updates/cases-in-us.html")
 	if err == nil {
 		defer response.Body.Close()
 
@@ -330,6 +536,7 @@ func main() {
 			})
 		})
 	}
+	// fmt.Println(tableData)
 	// log.Println(err)
 	exit := true
 
