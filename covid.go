@@ -464,7 +464,7 @@ func main() {
 	}
 	// log.Println(tableData)
 	/*------------------------------------------------------*/
-	lastUpdated = fmt.Sprintf("As of %v there are {%d} confirmed cases across straya and {%d} deads.", currTime, Format(strayaData.Confirmed["Australia"]), Format(strayaData.Dead["Australia"]))
+	lastUpdated = fmt.Sprintf("As of %v there are {%s} confirmed cases across straya and {%s} deads.", currTime, Format(strayaData.Confirmed["Australia"]), Format(strayaData.Dead["Australia"]))
 	// Create a goquery document from the HTTP response
 	// 	document, err := goquery.NewDocumentFromReader(response.Body)
 	// 	if err != nil {
