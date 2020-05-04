@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"math/rand"
 
 	"net/url"
 
@@ -31,54 +33,75 @@ type covidclient struct {
 	DocID string
 }
 
+
 func GetData() (OutData, error) {
-	c := NewCovidClient()
-	defer c.s.Close()
-	c.SendString(fmt.Sprintf(`{"delta":true,"handle":-1,"method":"OpenDoc","params":["%s","","","",false],"id":1,"jsonrpc":"2.0"}`, c.DocID))
-	c.SendString(`{"delta":true,"method":"IsPersonalMode","handle":-1,"params":[],"id":2,"jsonrpc":"2.0"}`)
-	c.SendString(`{"delta":true,"handle":1,"method":"GetAppLayout","params":[],"id":3,"jsonrpc":"2.0"}`)
-	c.SendString(`{"delta":true,"handle":1,"method":"GetObject","params":["RHjRJ"],"id":4,"jsonrpc":"2.0"}`)
-	c.SendString(`{"delta":true,"handle":1,"method":"CreateSessionObject","params":[{"qInfo":{"qType":"SelectionObject","qId":"MURnmNgqd"},"qSelectionObjectDef":{}}],"id":5,"jsonrpc":"2.0"}`)
-	c.SendString(`{"delta":true,"handle":1,"method":"CreateSessionObject","params":[{"qInfo":{"qType":"BookmarkList","qId":"MUjSEzzm"},"qBookmarkListDef":{"qType":"bookmark","qData":{"title":"/qMetaDef/title","description":"/qMetaDef/description","sheetId":"/sheetId","selectionFields":"/selectionFields","creationDate":"/creationDate"}}}],"id":6,"jsonrpc":"2.0"}`)
-	for {
-		_, msg, _ := c.s.ReadMessage()
-		d := json.NewDecoder(bytes.NewReader(msg))
-		buh := GetDocListResp{}
-		d.Decode(&buh)
-		//fmt.Println(buh)
-		if buh.Error.Message != "" {
-			return OutData{}, fmt.Errorf("%d %s", buh.ID, buh.Error.Message)
-		}
-		if buh.ID == 6 {
-			break
-		}
-	}
-	c.SendString(`{"delta":true,"handle":2,"method":"GetLayout","params":[],"id":7,"jsonrpc":"2.0"}`)
-	c.SendString(`{"delta":true,"handle":2,"method":"GetHyperCubeData","params":["/qHyperCubeDef",[{"qTop":0,"qLeft":0,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":1,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":2,"qHeight":9,"qWidth":1}]],"id":14,"jsonrpc":"2.0"}`)
 	od := OutData{
 		Confirmed: make(map[string]int),
 		Dead:      make(map[string]int),
 	}
 	for {
+		c := NewCovidClient()
+		defer c.s.Close()
+		c.SendString(fmt.Sprintf(`{"delta":true,"handle":-1,"method":"OpenDoc","params":["%s","","","",false],"id":1,"jsonrpc":"2.0"}`, c.DocID))
+		c.SendString(`{"delta":true,"method":"IsPersonalMode","handle":-1,"params":[],"id":2,"jsonrpc":"2.0"}`)
+		c.SendString(`{"delta":true,"handle":1,"method":"GetAppLayout","params":[],"id":3,"jsonrpc":"2.0"}`)
+		c.SendString(`{"delta":true,"handle":1,"method":"GetObject","params":["RHjRJ"],"id":4,"jsonrpc":"2.0"}`)
+		rand.Seed(time.Now().UnixNano())
+		bytz := make([]byte, 16)
+		rand.Read(bytz)
+		lol := base64.StdEncoding.EncodeToString(bytz)
+		sendme := fmt.Sprintf(`{"delta":true,"handle":1,"method":"CreateSessionObject","params":[{"qInfo":{"qType":"SelectionObject","qId":"%s"},"qSelectionObjectDef":{}}],"id":5,"jsonrpc":"2.0"}`, strings.ReplaceAll(lol, "=", ""))
+		//fmt.Println(sendme)
+		c.SendString(sendme)
+		c.SendString(`{"delta":true,"handle":1,"method":"CreateSessionObject","params":[{"qInfo":{"qType":"BookmarkList","qId":"MUjSEzzm"},"qBookmarkListDef":{"qType":"bookmark","qData":{"title":"/qMetaDef/title","description":"/qMetaDef/description","sheetId":"/sheetId","selectionFields":"/selectionFields","creationDate":"/creationDate"}}}],"id":6,"jsonrpc":"2.0"}`)
+		vals := map[int]bool{1: true, 2: true, 3: true, 4: true, 5: true, 6: true}
+		for {
+			_, mmsg, _ := c.s.ReadMessage()
+			d := json.NewDecoder(bytes.NewReader(mmsg))
+			bbuh := GetDocListResp{}
+			d.Decode(&bbuh)
+			//fmt.Println(buh)
+			if bbuh.Error.Message != "" {
+				return OutData{}, fmt.Errorf("%d %s", bbuh.ID, bbuh.Error.Message)
+			}
+			delete(vals, bbuh.ID)
+			if len(vals) == 0 {
+				break
+			}
+		}
+		c.SendString(`{"delta":true,"handle":2,"method":"GetLayout","params":[],"id":7,"jsonrpc":"2.0"}`)
 		_, msg, _ := c.s.ReadMessage()
 		d := json.NewDecoder(bytes.NewReader(msg))
 		buh := ActualData{}
 		d.Decode(&buh)
 		if buh.Error.Message != "" {
-			return OutData{}, fmt.Errorf("%d %s", buh.ID, buh.Error.Message)
+			panic("no")
 		}
-		if buh.ID == 14 {
+		lolstart := 8
+		for {
+			c.SendString(fmt.Sprintf(`{"delta":true,"handle":2,"method":"GetHyperCubeData","params":["/qHyperCubeDef",[{"qTop":0,"qLeft":0,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":1,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":2,"qHeight":9,"qWidth":1}]],"id":%d,"jsonrpc":"2.0"}`, lolstart))
+			lolstart++
+			_, msg2, _ := c.s.ReadMessage()
+			d = json.NewDecoder(bytes.NewReader(msg2))
+			buh = ActualData{}
+			d.Decode(&buh)
+			//fmt.Println(string(msg))
+			if buh.Error.Message != "" {
+				c.s.Close()
+				break
+			}
 			for i, j := range buh.Result.QDataPages[0].Value[0].QMatrix {
 				confirm := buh.Result.QDataPages[0].Value[1].QMatrix[i][0].QNum
 				dead := buh.Result.QDataPages[0].Value[2].QMatrix[i][0].QNum
 				od.Confirmed[j[0].QText] = confirm
 				od.Dead[j[0].QText] = dead
 			}
-			break
+			return od, nil
 		}
 	}
-	return od, nil
+	return od, fmt.Errorf("Whoops")
 }
+
 func NewCovidClient() *covidclient {
 	u := url.URL{
 		Scheme: "wss",
@@ -285,13 +308,13 @@ func compareDataSets(old, new [][]string) ([][]string, [][]string) {
 	modified := [][]string{}
 	deltas := [][]string{}
 	for _, newrow := range new {
-		// newboi := false
+		newboi := false
 		for _, oldrow := range old {
 			if oldrow[1] != newrow[1] {
-				// newboi = true
+				newboi = true
 				continue
 			}
-			// newboi = false
+			newboi = false
 			o, err := strconv.Atoi(oldrow[2])
 			if err != nil {
 				log.Fatal(err)
@@ -323,11 +346,11 @@ func compareDataSets(old, new [][]string) ([][]string, [][]string) {
 			deltas = append(deltas, d) // No change;
 			break
 		}
-		// if newboi {
-		// 	d := append(newrow, "", "")
-		// 	deltas = append(deltas, d)
-		// }
-
+		if newboi {
+			d := append(newrow, newrow[2], "NEW DATA")
+			deltas = append(deltas, d)
+			modified = append(modified, newrow)
+		}
 	}
 	return modified, deltas
 }
@@ -439,7 +462,7 @@ func main() {
 	for k, v := range strayaData.Confirmed {
 		tableData = append(tableData, []string{"straya", Sanitise(k), fmt.Sprintf("%d", v), currTime})
 	}
-	// log.Println(tableData)
+	log.Println(tableData)
 	/*------------------------------------------------------*/
 	lastUpdated = fmt.Sprintf("As of %v there are {%d} confirmed cases across straya and {%d} deads.", currTime, strayaData.Confirmed["Australia"], strayaData.Dead["Australia"])
 	// Create a goquery document from the HTTP response
