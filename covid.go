@@ -462,7 +462,7 @@ func main() {
 	for k, v := range strayaData.Confirmed {
 		tableData = append(tableData, []string{"straya", Sanitise(k), fmt.Sprintf("%d", v), currTime})
 	}
-	log.Println(tableData)
+	// log.Println(tableData)
 	/*------------------------------------------------------*/
 	lastUpdated = fmt.Sprintf("As of %v there are {%d} confirmed cases across straya and {%d} deads.", currTime, strayaData.Confirmed["Australia"], strayaData.Dead["Australia"])
 	// Create a goquery document from the HTTP response
