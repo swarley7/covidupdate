@@ -2,19 +2,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-	"math/rand"
 
 	"net/url"
 
@@ -33,10 +33,10 @@ type covidclient struct {
 	DocID string
 }
 
-
 func GetData() (OutData, error) {
 	od := OutData{
 		Confirmed: make(map[string]int),
+		Delta:     make(map[string]int),
 		Dead:      make(map[string]int),
 	}
 	for {
@@ -79,23 +79,36 @@ func GetData() (OutData, error) {
 		}
 		lolstart := 8
 		for {
-			c.SendString(fmt.Sprintf(`{"delta":true,"handle":2,"method":"GetHyperCubeData","params":["/qHyperCubeDef",[{"qTop":0,"qLeft":0,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":1,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":2,"qHeight":9,"qWidth":1}]],"id":%d,"jsonrpc":"2.0"}`, lolstart))
+			c.SendString(fmt.Sprintf(`{"delta":true,"handle":2,"method":"GetHyperCubeData","params":["/qHyperCubeDef",[{"qTop":0,"qLeft":0,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":1,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":2,"qHeight":9,"qWidth":1},{"qTop":0,"qLeft":3,"qHeight":9,"qWidth":1}]],"id":%d,"jsonrpc":"2.0"}`, lolstart))
 			lolstart++
 			_, msg2, _ := c.s.ReadMessage()
 			d = json.NewDecoder(bytes.NewReader(msg2))
+
 			buh = ActualData{}
 			d.Decode(&buh)
+			// if len(buh.Result.QDataPages[0].Value) != 4 {
+			// 	continue
+			// }
+			// x := []byte{}
+			// log.Println(string(msg2))
+
+			// log.Println(buh)
 			//fmt.Println(string(msg))
 			if buh.Error.Message != "" {
 				c.s.Close()
 				break
 			}
+			// log.Println(buh.Result.QDataPages[0].Value)
 			for i, j := range buh.Result.QDataPages[0].Value[0].QMatrix {
 				confirm := buh.Result.QDataPages[0].Value[1].QMatrix[i][0].QNum
-				dead := buh.Result.QDataPages[0].Value[2].QMatrix[i][0].QNum
+				delta := buh.Result.QDataPages[0].Value[2].QMatrix[i][0].QNum
+				dead := buh.Result.QDataPages[0].Value[3].QMatrix[i][0].QNum
+
 				od.Confirmed[j[0].QText] = confirm
+				od.Delta[j[0].QText] = delta
 				od.Dead[j[0].QText] = dead
 			}
+			// log.Println(od)
 			return od, nil
 		}
 	}
@@ -225,6 +238,7 @@ type ActualData struct {
 }
 type OutData struct {
 	Confirmed map[string]int
+	Delta     map[string]int
 	Dead      map[string]int
 }
 
@@ -462,7 +476,7 @@ func main() {
 	for k, v := range strayaData.Confirmed {
 		tableData = append(tableData, []string{"straya", Sanitise(k), fmt.Sprintf("%d", v), currTime})
 	}
-	// log.Println(tableData)
+	// log.Println(strayaData.Dead)
 	/*------------------------------------------------------*/
 	lastUpdated = fmt.Sprintf("As of %v there are {%s} confirmed cases across straya and {%s} deads.", currTime, Format(strayaData.Confirmed["Australia"]), Format(strayaData.Dead["Australia"]))
 	// Create a goquery document from the HTTP response
