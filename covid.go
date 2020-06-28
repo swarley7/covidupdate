@@ -45,7 +45,7 @@ func GetData() (OutData, error) {
 		c.SendString(fmt.Sprintf(`{"delta":true,"handle":-1,"method":"OpenDoc","params":["%s","","","",false],"id":1,"jsonrpc":"2.0"}`, c.DocID))
 		c.SendString(`{"delta":true,"method":"IsPersonalMode","handle":-1,"params":[],"id":2,"jsonrpc":"2.0"}`)
 		c.SendString(`{"delta":true,"handle":1,"method":"GetAppLayout","params":[],"id":3,"jsonrpc":"2.0"}`)
-		c.SendString(`{"delta":true,"handle":1,"method":"GetObject","params":["RHjRJ"],"id":4,"jsonrpc":"2.0"}`)
+		c.SendString(`{"delta":true,"handle":1,"method":"GetObject","params":["KdmpZ"],"id":4,"jsonrpc":"2.0"}`)
 		rand.Seed(time.Now().UnixNano())
 		bytz := make([]byte, 16)
 		rand.Read(bytz)
