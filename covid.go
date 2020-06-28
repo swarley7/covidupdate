@@ -558,6 +558,35 @@ func main() {
 	}
 	// log.Println(err)
 
+	//Pom data
+	response, err = http.Get("https://www.gov.uk/guidance/coronavirus-covid-19-information-for-the-public")
+	if err == nil {
+		defer response.Body.Close()
+
+		// Create a goquery document from the HTTP response
+		document, err := goquery.NewDocumentFromReader(response.Body)
+		if err != nil {
+			log.Fatal("Error loading HTTP response body. ", err)
+		}
+
+		// tableData = append(tableData, []string{"~Murica", "~Dataz", "~Delta (TBD)"})
+		labels := []string{"total_cases", "total_deaths"}
+
+		s := document.Find(".govspeak > table:nth-child(5)")
+		s = s.Find("tbody tr").Next() // Get the next table row
+		s.Find("td").Each(func(i int, s *goquery.Selection) {
+			if i < 3 {
+				return
+			}
+			log.Println(i, s.Text())
+			num := s.Text()
+			num = strings.Replace(num, ",", "", -1)
+			num = strings.Replace(num, "\ufeff", "", -1)
+			res := []string{"pomz", Sanitise(labels[i-3]), Sanitise(num), currTime}
+			tableData = append(tableData, res)
+		})
+	}
+
 	//NZ data
 	response, err = http.Get("https://www.health.govt.nz/our-work/diseases-and-conditions/covid-19-novel-coronavirus/covid-19-current-cases")
 	if err == nil {
