@@ -489,7 +489,6 @@ func main() {
 		})
 	}
 
-	log.Println(sockzid)
 	/*------------------------------------------------------*/
 	// CSTO ADDITIONS
 	strayaData, err := GetData(sockzid)
@@ -570,7 +569,7 @@ func main() {
 		}
 
 		// tableData = append(tableData, []string{"~Murica", "~Dataz", "~Delta (TBD)"})
-		labels := []string{"total_cases", "total_deaths"}
+		labels := []string{"total_covids", "total_deads"}
 
 		s := document.Find(".govspeak > table:nth-child(5)")
 		s = s.Find("tbody tr").Next() // Get the next table row
