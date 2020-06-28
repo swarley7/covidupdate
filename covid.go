@@ -33,7 +33,7 @@ type covidclient struct {
 	DocID string
 }
 
-func GetData() (OutData, error) {
+func GetData(sockzid string) (OutData, error) {
 	od := OutData{
 		Confirmed: make(map[string]int),
 		Delta:     make(map[string]int),
@@ -45,7 +45,7 @@ func GetData() (OutData, error) {
 		c.SendString(fmt.Sprintf(`{"delta":true,"handle":-1,"method":"OpenDoc","params":["%s","","","",false],"id":1,"jsonrpc":"2.0"}`, c.DocID))
 		c.SendString(`{"delta":true,"method":"IsPersonalMode","handle":-1,"params":[],"id":2,"jsonrpc":"2.0"}`)
 		c.SendString(`{"delta":true,"handle":1,"method":"GetAppLayout","params":[],"id":3,"jsonrpc":"2.0"}`)
-		c.SendString(`{"delta":true,"handle":1,"method":"GetObject","params":["KdmpZ"],"id":4,"jsonrpc":"2.0"}`)
+		c.SendString(fmt.Sprintf(`{"delta":true,"handle":1,"method":"GetObject","params":["%s"],"id":4,"jsonrpc":"2.0"}`, sockzid))
 		rand.Seed(time.Now().UnixNano())
 		bytz := make([]byte, 16)
 		rand.Read(bytz)
@@ -464,10 +464,35 @@ func main() {
 	// response, err := http.Get("https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers")
 	// if err == nil {
 	// 	defer response.Body.Close()
+	// Get AU bullshit content ID for use with websockz
+	sockzid := ""
+	response, err := http.Get("https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers#total-cases-recoveries-deaths-and-new-cases-in-the-last-24-hours")
+	if err == nil {
+		defer response.Body.Close()
 
+		// Create a goquery document from the HTTP response
+		document, err := goquery.NewDocumentFromReader(response.Body)
+		if err != nil {
+			log.Fatal("Error loading HTTP response body. ", err)
+		}
+
+		document.Find("div.ds-1col.node.node-page.view-mode-full.clearfix div.wrapper div.data-visualisation--inline").Each(func(i int, s *goquery.Selection) {
+			s.Find("div").Each(func(i int, s *goquery.Selection) {
+				if class, _ := s.Attr("class"); class == "content" && strings.Contains(strings.ToLower(s.Text()), "total covid-19 cases and deaths by states and territories") {
+					s.Find("div").Each(func(i int, s *goquery.Selection) {
+						if class, _ := s.Attr("class"); class == "qvobject" {
+							sockzid, _ = s.Attr("id")
+						}
+					})
+				}
+			})
+		})
+	}
+
+	log.Println(sockzid)
 	/*------------------------------------------------------*/
 	// CSTO ADDITIONS
-	strayaData, err := GetData()
+	strayaData, err := GetData(sockzid)
 	if err != nil {
 		log.Println(err)
 	}
@@ -510,7 +535,7 @@ func main() {
 	// log.Println(err)
 
 	//Murica data
-	response, err := http.Get("https://www.cdc.gov/coronavirus/2019-ncov/cases-updates/cases-in-us.html")
+	response, err = http.Get("https://www.cdc.gov/coronavirus/2019-ncov/cases-updates/cases-in-us.html")
 	if err == nil {
 		defer response.Body.Close()
 
